@@ -1,0 +1,544 @@
+#include <gba.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <string.h>
+
+#define SCREEN_W 240
+#define SCREEN_H 160
+
+#define BLACK   0x0000
+#define NAVY    0x001F
+#define BLUE    0x03E0
+#define CYAN    0x07FF
+#define PINK    0x7C1F
+#define YELLOW  0x7FE0
+#define WHITE   0x7FFF
+#define GREY    0x4210
+#define GREEN   0x03E0
+#define RED     0xF800
+#define DARK    0x0010
+
+typedef enum {
+    PAGE_HOME,
+    PAGE_SEARCH,
+    PAGE_DIRECTORY,
+    PAGE_SITE,
+    PAGE_CREATE,
+    PAGE_GAME,
+    PAGE_EGGS
+} Page;
+
+typedef struct {
+    const char *name;
+    const char *url;
+    const char *line1;
+    const char *line2;
+    uint16_t accent;
+} Site;
+
+static const char font_chars[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789:-./!?'+ ";
+static const uint8_t font_5x7[] = {
+    // A
+    0x7E,0x09,0x09,0x09,0x7E,0x00,0x00,
+    // B
+    0x7F,0x49,0x49,0x49,0x36,0x00,0x00,
+    // C
+    0x3E,0x41,0x41,0x41,0x22,0x00,0x00,
+    // D
+    0x7F,0x41,0x41,0x22,0x1C,0x00,0x00,
+    // E
+    0x7F,0x49,0x49,0x49,0x41,0x00,0x00,
+    // F
+    0x7F,0x09,0x09,0x09,0x01,0x00,0x00,
+    // G
+    0x3E,0x41,0x49,0x49,0x7A,0x00,0x00,
+    // H
+    0x7F,0x08,0x08,0x08,0x7F,0x00,0x00,
+    // I
+    0x00,0x41,0x7F,0x41,0x00,0x00,0x00,
+    // J
+    0x20,0x40,0x41,0x3F,0x01,0x00,0x00,
+    // K
+    0x7F,0x08,0x14,0x22,0x41,0x00,0x00,
+    // L
+    0x7F,0x40,0x40,0x40,0x40,0x00,0x00,
+    // M
+    0x7F,0x02,0x04,0x02,0x7F,0x00,0x00,
+    // N
+    0x7F,0x04,0x08,0x10,0x7F,0x00,0x00,
+    // O
+    0x3E,0x41,0x41,0x41,0x3E,0x00,0x00,
+    // P
+    0x7F,0x09,0x09,0x09,0x06,0x00,0x00,
+    // Q
+    0x3E,0x41,0x51,0x21,0x5E,0x00,0x00,
+    // R
+    0x7F,0x09,0x19,0x29,0x46,0x00,0x00,
+    // S
+    0x46,0x49,0x49,0x49,0x31,0x00,0x00,
+    // T
+    0x01,0x01,0x7F,0x01,0x01,0x00,0x00,
+    // U
+    0x3F,0x40,0x40,0x40,0x3F,0x00,0x00,
+    // V
+    0x1F,0x20,0x40,0x20,0x1F,0x00,0x00,
+    // W
+    0x3F,0x40,0x38,0x40,0x3F,0x00,0x00,
+    // X
+    0x63,0x14,0x08,0x14,0x63,0x00,0x00,
+    // Y
+    0x07,0x08,0x70,0x08,0x07,0x00,0x00,
+    // Z
+    0x61,0x51,0x49,0x45,0x43,0x00,0x00,
+    // 0
+    0x3E,0x51,0x49,0x45,0x3E,0x00,0x00,
+    // 1
+    0x00,0x42,0x7F,0x40,0x00,0x00,0x00,
+    // 2
+    0x42,0x61,0x51,0x49,0x46,0x00,0x00,
+    // 3
+    0x21,0x41,0x49,0x4D,0x33,0x00,0x00,
+    // 4
+    0x18,0x14,0x12,0x7F,0x10,0x00,0x00,
+    // 5
+    0x77,0x49,0x49,0x49,0x36,0x00,0x00,
+    // 6
+    0x3E,0x49,0x49,0x49,0x32,0x00,0x00,
+    // 7
+    0x01,0x01,0x79,0x09,0x07,0x00,0x00,
+    // 8
+    0x36,0x49,0x49,0x49,0x36,0x00,0x00,
+    // 9
+    0x26,0x49,0x49,0x49,0x3E,0x00,0x00,
+    // :
+    0x00,0x00,0x36,0x00,0x00,0x00,0x00,
+    // -
+    0x00,0x00,0x7F,0x00,0x00,0x00,0x00,
+    // .
+    0x00,0x00,0x60,0x00,0x00,0x00,0x00,
+    // /
+    0x40,0x20,0x10,0x08,0x04,0x00,0x00,
+    // space
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    // !
+    0x00,0x00,0x5F,0x00,0x00,0x00,0x00,
+    // ?
+    0x00,0x02,0x01,0x51,0x09,0x00,0x00,
+    // '
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    // +
+    0x08,0x08,0x3E,0x08,0x08,0x00,0x00
+};
+
+static const Site builtins[] = {
+    { "PIXEL GARDEN", "garden.link", "A tiny garden for", "curious pixel fans.", CYAN },
+    { "MOON RADIO", "moon.link", "Music from the", "other side of night.", PINK },
+    { "GBA ARCHIVE", "archive.link", "Stories, sprites,", "and friendly pixels.", YELLOW },
+    { "STAR ATLAS", "stars.link", "Find constellations", "in a pocket sky.", GREEN }
+};
+
+#define BUILTIN_COUNT 4
+#define CUSTOM_TITLE_MAX 14
+
+static Page page = PAGE_HOME;
+static int menuSelection = 0;
+static int siteSelection = 0;
+static int openSite = 0;
+static int customExists = 0;
+static char customTitle[CUSTOM_TITLE_MAX] = "MY SITE";
+static int cursorIndex = 0;
+static int gameX = 112;
+static int gameY = 120;
+static int starX = 30;
+static int starY = 70;
+static int score = 0;
+static int easterUnlocked = 0;
+static uint16_t prevKeys = 0;
+
+static const uint16_t combo[] = { KEY_UP, KEY_UP, KEY_DOWN, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_LEFT, KEY_RIGHT, KEY_B, KEY_A };
+static unsigned comboIndex = 0;
+
+static void fillRect(int x, int y, int w, int h, uint16_t color) {
+    if (x < 0) { w += x; x = 0; }
+    if (y < 0) { h += y; y = 0; }
+    if (x + w > SCREEN_W) w = SCREEN_W - x;
+    if (y + h > SCREEN_H) h = SCREEN_H - y;
+    if (w <= 0 || h <= 0) return;
+
+    volatile uint16_t *vram = (volatile uint16_t *)VRAM;
+    for (int yy = y; yy < y + h; yy++) {
+        for (int xx = x; xx < x + w; xx++) {
+            vram[yy * SCREEN_W + xx] = color;
+        }
+    }
+}
+
+static int charIndex(char ch) {
+    if (ch >= 'a' && ch <= 'z') ch = ch - 'a' + 'A';
+
+    for (int i = 0; font_chars[i]; i++) {
+        if (font_chars[i] == ch) return i;
+    }
+    return -1;
+}
+
+static void drawChar(int x, int y, char ch, uint16_t color, int scale) {
+    int idx = charIndex(ch);
+    if (idx < 0) return;
+
+    int glyphOffset = idx * 7;
+    for (int row = 0; row < 7; row++) {
+        uint8_t bits = font_5x7[glyphOffset + row];
+        for (int col = 0; col < 5; col++) {
+            if ((bits >> (4 - col)) & 1) {
+                fillRect(x + col * scale, y + row * scale, scale, scale, color);
+            }
+        }
+    }
+}
+
+static void drawText(int x, int y, const char *text, uint16_t color, int scale) {
+    while (*text) {
+        drawChar(x, y, *text, color, scale);
+        x += 6 * scale;
+        text++;
+    }
+}
+
+static void drawBox(int x, int y, int w, int h, uint16_t bg, uint16_t line) {
+    fillRect(x, y, w, h, bg);
+    fillRect(x, y, w, 2, line);
+    fillRect(x, y, 2, h, line);
+    fillRect(x + w - 2, y, 2, h, line);
+    fillRect(x, y + h - 2, w, 2, line);
+}
+
+static int siteCount(void) {
+    return BUILTIN_COUNT + customExists;
+}
+
+static const char *siteName(int index) {
+    if (index >= BUILTIN_COUNT) return customTitle;
+    return builtins[index].name;
+}
+
+static const char *siteURL(int index) {
+    if (index >= BUILTIN_COUNT) return "user.link";
+    return builtins[index].url;
+}
+
+static uint16_t siteColor(int index) {
+    if (index >= BUILTIN_COUNT) return PINK;
+    return builtins[index].accent;
+}
+
+static void drawShell(const char *url) {
+    fillRect(0, 0, SCREEN_W, SCREEN_H, BLACK);
+
+    fillRect(0, 0, SCREEN_W, 20, NAVY);
+    fillRect(8, 6, 10, 8, easterUnlocked ? YELLOW : CYAN);
+    drawText(22, 5, "LINKPULSE", WHITE, 1);
+    drawText(160, 6, "LOCAL WEB", GREY, 1);
+
+    drawBox(8, 28, 224, 18, DARK, GREY);
+    drawText(18, 34, url, WHITE, 1);
+
+    fillRect(0, 150, SCREEN_W, 10, NAVY);
+    drawText(8, 153, "A:OPEN  B:BACK  START:MENU", GREY, 1);
+}
+
+static void drawHome(void) {
+    drawShell("linkpulse://home");
+
+    drawBox(10, 52, 220, 48, DARK, GREY);
+    drawText(18, 62, easterUnlocked ? "SECRET FOUND!" : "LINKPULSE HOME", easterUnlocked ? YELLOW : CYAN, 1);
+    drawText(18, 78, "BROWSER-LIKE LOCAL WEB", WHITE, 1);
+
+    const char *items[] = {
+        "SEARCH LOCAL SITES",
+        "OPEN DIRECTORY",
+        "MAKE A WEBSITE",
+        "PLAY STAR CATCH",
+        "EASTER EGGS"
+    };
+
+    for (int i = 0; i < 5; i++) {
+        int y = 108 + i * 10;
+        uint16_t bg = (i == menuSelection) ? BLUE : DARK;
+        uint16_t accent = (i == menuSelection) ? CYAN : GREY;
+        fillRect(14, y, 212, 8, bg);
+        fillRect(14, y, 3, 8, accent);
+        drawText(22, y + 1, items[i], WHITE, 1);
+    }
+}
+
+static void drawDirectoryList(const char *title) {
+    drawShell("linkpulse://search");
+    drawText(14, 52, title, CYAN, 1);
+
+    for (int i = 0; i < siteCount(); i++) {
+        int y = 68 + i * 16;
+        uint16_t bg = (i == siteSelection) ? BLUE : DARK;
+        fillRect(12, y, 216, 12, bg);
+        fillRect(12, y, 3, 12, siteColor(i));
+        drawText(18, y + 3, siteName(i), WHITE, 1);
+        drawText(150, y + 3, siteURL(i), GREY, 1);
+    }
+}
+
+static void drawSiteViewer(void) {
+    drawShell(siteURL(openSite));
+
+    drawBox(12, 56, 216, 78, DARK, GREY);
+    fillRect(12, 56, 216, 3, siteColor(openSite));
+
+    drawText(18, 68, siteName(openSite), WHITE, 1);
+
+    if (openSite >= BUILTIN_COUNT) {
+        drawText(18, 86, "A WEBSITE MADE IN LINKPULSE", CYAN, 1);
+        drawText(18, 100, "USER-MADE LOCAL CONTENT", WHITE, 1);
+        drawText(18, 114, "links: home  games  news", GREY, 1);
+    } else {
+        drawText(18, 86, builtins[openSite].line1, CYAN, 1);
+        drawText(18, 100, builtins[openSite].line2, WHITE, 1);
+        drawText(18, 114, "links: home  games  about", GREY, 1);
+    }
+}
+
+static void drawCreatePage(void) {
+    drawShell("linkpulse://create");
+
+    drawBox(12, 54, 216, 80, DARK, GREY);
+    drawText(18, 62, "MAKE A LOCAL WEBSITE", CYAN, 1);
+    drawText(18, 78, "EDIT TITLE", WHITE, 1);
+
+    fillRect(18, 96, 180, 18, BLUE);
+    drawText(24, 102, customTitle, WHITE, 1);
+
+    int cursorX = 24 + cursorIndex * 6;
+    fillRect(cursorX, 116, 5, 2, YELLOW);
+
+    drawText(18, 124, "D-pad: move", GREY, 1);
+    drawText(18, 134, "A: add char  B: delete  START: publish", GREY, 1);
+}
+
+static void drawGamePage(void) {
+    drawShell("linkpulse://games/star-catch");
+
+    drawBox(10, 50, 220, 90, NAVY, GREY);
+    drawText(18, 58, "STAR CATCH", YELLOW, 1);
+    drawText(170, 58, "SCORE", GREY, 1);
+
+    char s[12];
+    snprintf(s, sizeof(s), "%d", score);
+    drawText(200, 58, s, WHITE, 1);
+
+    fillRect(starX, starY, 6, 6, YELLOW);
+    fillRect(gameX, gameY, 12, 6, CYAN);
+
+    drawText(16, 128, "D-pad move   A: catch   START: reset", GREY, 1);
+}
+
+static void drawEggsPage(void) {
+    drawShell("linkpulse://easter-eggs");
+
+    drawBox(12, 58, 216, 72, DARK, GREY);
+    drawText(18, 68, "A LITTLE WESTERN SECRET", CYAN, 1);
+    drawText(18, 84, "TRY THIS CLASSIC BUTTON SEQUENCE", WHITE, 1);
+
+    if (easterUnlocked) {
+        drawText(18, 100, "SECRET MODE UNLOCKED!", YELLOW, 1);
+    } else {
+        drawText(18, 100, "SEQUENCE INCOMPLETE", GREY, 1);
+    }
+}
+
+static void updateGameLogic(uint16_t pressed) {
+    if (pressed & KEY_LEFT) gameX -= 4;
+    if (pressed & KEY_RIGHT) gameX += 4;
+    if (pressed & KEY_UP) gameY -= 4;
+    if (pressed & KEY_DOWN) gameY += 4;
+
+    if (gameX < 12) gameX = 12;
+    if (gameX > 220) gameX = 220;
+    if (gameY < 60) gameY = 60;
+    if (gameY > 130) gameY = 130;
+
+    if (gameX >= starX - 10 && gameX <= starX + 10 &&
+        gameY >= starY - 10 && gameY <= starY + 10) {
+        score++;
+        starX = 20 + (score * 29) % 180;
+        starY = 70 + (score * 19) % 40;
+    }
+}
+
+static void updateCreateEditor(uint16_t pressed) {
+    static const char alphabet[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789- ";
+
+    int len = strlen(customTitle);
+
+    if (pressed & KEY_RIGHT) {
+        if (cursorIndex < len - 1) cursorIndex++;
+    }
+    if (pressed & KEY_LEFT) {
+        if (cursorIndex > 0) cursorIndex--;
+    }
+
+    if (pressed & KEY_UP) {
+        int idx = 0;
+        while (alphabet[idx] != customTitle[cursorIndex] && alphabet[idx]) idx++;
+        if (alphabet[idx]) {
+            idx++;
+            if (!alphabet[idx]) idx = 0;
+            customTitle[cursorIndex] = alphabet[idx];
+        } else {
+            customTitle[cursorIndex] = alphabet[0];
+        }
+    }
+
+    if (pressed & KEY_DOWN) {
+        int idx = 0;
+        while (alphabet[idx] != customTitle[cursorIndex] && alphabet[idx]) idx++;
+        if (alphabet[idx]) {
+            idx--;
+            if (idx < 0) idx = strlen(alphabet) - 1;
+            customTitle[cursorIndex] = alphabet[idx];
+        } else {
+            customTitle[cursorIndex] = alphabet[strlen(alphabet) - 1];
+        }
+    }
+
+    if (pressed & KEY_B) {
+        if (len > 0) {
+            for (int i = cursorIndex; i < len - 1; i++) {
+                customTitle[i] = customTitle[i + 1];
+            }
+            customTitle[len - 1] = 0;
+            if (cursorIndex > (int)strlen(customTitle)) cursorIndex = strlen(customTitle) - 1;
+            if (cursorIndex < 0) cursorIndex = 0;
+        }
+    }
+
+    if (pressed & KEY_A) {
+        if (strlen(customTitle) < CUSTOM_TITLE_MAX - 1) {
+            for (int i = strlen(customTitle); i > cursorIndex; i--) {
+                customTitle[i] = customTitle[i - 1];
+            }
+            customTitle[cursorIndex] = ' ';
+            if (cursorIndex < (int)strlen(customTitle) - 1) cursorIndex++;
+        }
+    }
+
+    if (pressed & KEY_START) {
+        if (strlen(customTitle) == 0) {
+            strcpy(customTitle, "MY SITE");
+        }
+        customExists = 1;
+        openSite = BUILTIN_COUNT;
+        page = PAGE_SITE;
+    }
+}
+
+static void updateCombo(uint16_t pressed) {
+    if (pressed & (KEY_UP | KEY_DOWN | KEY_LEFT | KEY_RIGHT | KEY_A | KEY_B)) {
+        uint16_t key = pressed & (KEY_UP | KEY_DOWN | KEY_LEFT | KEY_RIGHT | KEY_A | KEY_B);
+
+        if (key == combo[comboIndex]) {
+            comboIndex++;
+            if (comboIndex == sizeof(combo) / sizeof(combo[0])) {
+                easterUnlocked = 1;
+                comboIndex = 0;
+            }
+        } else {
+            if (key == combo[0]) {
+                comboIndex = 1;
+            } else {
+                comboIndex = 0;
+            }
+        }
+    }
+}
+
+int main(void) {
+    REG_DISPCNT = MODE_3 | BG2_ENABLE;
+
+    uint16_t keys = 0;
+    uint16_t pressed = 0;
+
+    while (1) {
+        keys = (~REG_KEYINPUT) & 0x3FF;
+        pressed = keys & ~prevKeys;
+        prevKeys = keys;
+
+        updateCombo(pressed);
+
+        if (page == PAGE_HOME) {
+            if (pressed & KEY_UP) menuSelection = (menuSelection + 4) % 5;
+            if (pressed & KEY_DOWN) menuSelection = (menuSelection + 1) % 5;
+
+            if (pressed & KEY_A) {
+                switch (menuSelection) {
+                    case 0: page = PAGE_SEARCH; siteSelection = 0; break;
+                    case 1: page = PAGE_DIRECTORY; siteSelection = 0; break;
+                    case 2: page = PAGE_CREATE; cursorIndex = 0; break;
+                    case 3: page = PAGE_GAME; break;
+                    case 4: page = PAGE_EGGS; break;
+                }
+            }
+        } else if (page == PAGE_SEARCH || page == PAGE_DIRECTORY) {
+            if (pressed & KEY_UP) siteSelection = (siteSelection + siteCount() - 1) % siteCount();
+            if (pressed & KEY_DOWN) siteSelection = (siteSelection + 1) % siteCount();
+
+            if (pressed & KEY_A) {
+                openSite = siteSelection;
+                page = PAGE_SITE;
+            }
+
+            if (pressed & KEY_B) {
+                page = PAGE_HOME;
+            }
+        } else if (page == PAGE_SITE) {
+            if (pressed & KEY_B) page = PAGE_HOME;
+            if (pressed & KEY_A) page = PAGE_DIRECTORY;
+        } else if (page == PAGE_CREATE) {
+            updateCreateEditor(pressed);
+            if (pressed & KEY_B && (pressed & KEY_START)) page = PAGE_HOME;
+        } else if (page == PAGE_GAME) {
+            updateGameLogic(pressed);
+            if (pressed & KEY_START) {
+                score = 0;
+                gameX = 112;
+                gameY = 120;
+                starX = 30;
+                starY = 70;
+            }
+            if (pressed & KEY_B) page = PAGE_HOME;
+        } else if (page == PAGE_EGGS) {
+            if (pressed & KEY_B) page = PAGE_HOME;
+        }
+
+        switch (page) {
+            case PAGE_HOME: drawHome(); break;
+            case PAGE_SEARCH:
+            case PAGE_DIRECTORY:
+                drawDirectoryList(page == PAGE_SEARCH ? "LOCAL SEARCH" : "SITE DIRECTORY");
+                break;
+            case PAGE_SITE:
+                drawSiteViewer();
+                break;
+            case PAGE_CREATE:
+                drawCreatePage();
+                break;
+            case PAGE_GAME:
+                drawGamePage();
+                break;
+            case PAGE_EGGS:
+                drawEggsPage();
+                break;
+        }
+
+        VBlankIntrWait();
+    }
+
+    return 0;
+}
