@@ -22,7 +22,7 @@ export DEPSDIR := $(CURDIR)/$(BUILD)
 all: $(BUILD)
 
 $(BUILD):
-	@[ -d $@ ] || mkdir -p $@
+	@mkdir -p $@
 	@$(MAKE) --no-print-directory -C $@ -f $(CURDIR)/Makefile
 
 clean:
